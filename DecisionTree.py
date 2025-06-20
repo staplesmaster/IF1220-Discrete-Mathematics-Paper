@@ -10,7 +10,7 @@ df['Close time'] = pd.to_datetime(df['Close time'])
 df['Date'] = df['Close time'].dt.date         
 df.set_index('Date', inplace=True)             
 
-# pastikan angka
+# Ensure numeric columns
 num_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
 df[num_cols] = df[num_cols].apply(pd.to_numeric, errors='coerce')
 df.dropna(subset=num_cols, inplace=True)
@@ -34,11 +34,11 @@ df['MACD_hist']    = df['MACD'] - df['MACD_signal']
 
 df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
 
-# MACD
+# Drop rows with missing indicators
 df.dropna(subset=['RSI', 'MACD', 'MACD_signal', 'MACD_hist', 'EMA_50'], inplace=True)
 
 # Decision-tree rule 
-def rule(row, prev):
+def rule_adjusted_rsi(row, prev):
     above = row['Close'] > row['EMA_50']
     bull = row['MACD'] > row['MACD_signal']
     bear = row['MACD'] < row['MACD_signal']
@@ -46,7 +46,7 @@ def rule(row, prev):
     hist_down = prev is not None and row['MACD_hist'] < prev['MACD_hist']
 
     if above:
-        if row['RSI'] < 30:
+        if row['RSI'] < 35:  
             if bull:
                 if hist_up:
                     return 1  
@@ -54,19 +54,16 @@ def rule(row, prev):
                     return 0  
             else:
                 return 0  
-        else:
-            if row['RSI'] >= 30:
-                if row['RSI'] <= 50:
-                    if bull:
-                        return 1  
-                    else:
-                        return 0 
+        else:  # RSI >= 35
+            if row['RSI'] <= 60:  
+                if bull:
+                    return 1  
                 else:
                     return 0 
-            else:
-                return 0  
-    else:
-        if row['RSI'] > 70:
+            else:  # RSI > 60
+                return 0 
+    else:  # below EMA_50
+        if row['RSI'] > 65: 
             if bear:
                 if hist_down:
                     return -1  
@@ -74,23 +71,20 @@ def rule(row, prev):
                     return 0 
             else:
                 return 0  
-        else:
-            if row['RSI'] >= 50:
-                if row['RSI'] <= 70:
-                    if bear:
-                        return -1  
-                    else:
-                        return 0 
+        else:  # RSI <= 65
+            if row['RSI'] >= 40:  
+                if bear:
+                    return -1  
                 else:
                     return 0 
-            else:
-                return 0  
+            else:  # RSI < 40
+                return 0
 
 df['Signal'] = 0
 dates = df.index.tolist()
 for i in range(1, len(dates)):
     today, yesterday = dates[i], dates[i-1]
-    df.loc[today, 'Signal'] = rule(df.loc[today], df.loc[yesterday])
+    df.loc[today, 'Signal'] = rule_adjusted_rsi(df.loc[today], df.loc[yesterday])  # Fixed function name
 
 
 print("Available date range:", df.index.min(), "to", df.index.max())
@@ -115,4 +109,3 @@ try:
 
 except Exception as e:
     print("⚠", e)
-
